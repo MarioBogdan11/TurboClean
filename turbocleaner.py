@@ -44,9 +44,10 @@ class TurboCleanApp(ctk.CTk):
             "quick_clean_drive": ["clean_drive.png", "drive_clean.png"],
             "quick_ping_test": ["ping.png", "network.png", "wifi.png"],
             "quick_hardware_info": ["hardware.png", "info.png", "system.png"],
-            "program_box": ["box.png", "package.png"],
+            "program_box": ["box.png", "package.png", "programs.png"],
             "program_old": ["old.png", "deprecated.png"]
         }
+        self.image_cache = {} # Cache for loaded CTkImage objects
         
         # Data
         self.scan_results = {"junk": 0, "old": 0, "issues": 0, "size": 0}
@@ -79,13 +80,21 @@ class TurboCleanApp(ctk.CTk):
             return None
 
     def get_image(self, key, size):
+        cache_key = (key, size)
+        if cache_key in self.image_cache:
+            return self.image_cache[cache_key]
+
         candidates = self.asset_map.get(key, [])
         if not candidates:
             return None
         path = self._find_asset_path(candidates)
         if not path:
             return None
-        return self._load_ctk_image(path, size)
+        
+        image = self._load_ctk_image(path, size)
+        if image:
+            self.image_cache[cache_key] = image
+        return image
 
     def setup_sidebar(self):
         self.sidebar = ctk.CTkFrame(self, width=200, corner_radius=0, fg_color=SIDEBAR_COLOR)
