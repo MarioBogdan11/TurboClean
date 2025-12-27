@@ -30,6 +30,24 @@ class TurboCleanApp(ctk.CTk):
         self.geometry("1100x700")
         self.configure(fg_color=BG_COLOR)
         
+        # Asset directories and map (images optional, emojis used as fallback)
+        self.asset_dirs = [
+            os.path.join(os.path.dirname(__file__), "assets"),
+            os.path.join(os.path.dirname(__file__), "Assets")
+        ]
+        self.asset_map = {
+            "logo": ["logo.png", "logo.jpg", "logo.webp"],
+            "scan_shield": ["scan.png", "shield.png", "shield-emoji.png"],
+            "disk": ["disk.png", "drive.png", "hdd.png"],
+            "clean_sparkle": ["sparkle.png", "clean.png", "sparkles.png"],
+            "trash": ["trash.png", "bin.png", "delete.png"],
+            "quick_clean_drive": ["clean_drive.png", "drive_clean.png"],
+            "quick_ping_test": ["ping.png", "network.png", "wifi.png"],
+            "quick_hardware_info": ["hardware.png", "info.png", "system.png"],
+            "program_box": ["box.png", "package.png"],
+            "program_old": ["old.png", "deprecated.png"]
+        }
+        
         # Data
         self.scan_results = {"junk": 0, "old": 0, "issues": 0, "size": 0}
         self.clean_targets = []
@@ -45,21 +63,40 @@ class TurboCleanApp(ctk.CTk):
         # Start on Scan page
         self.show_frame("scan")
 
+    def _find_asset_path(self, candidates):
+        for folder in self.asset_dirs:
+            for name in candidates:
+                p = os.path.join(folder, name)
+                if os.path.exists(p):
+                    return p
+        return None
+
+    def _load_ctk_image(self, path, size):
+        try:
+            pil_image = Image.open(path)
+            return ctk.CTkImage(light_image=pil_image, dark_image=pil_image, size=size)
+        except Exception:
+            return None
+
+    def get_image(self, key, size):
+        candidates = self.asset_map.get(key, [])
+        if not candidates:
+            return None
+        path = self._find_asset_path(candidates)
+        if not path:
+            return None
+        return self._load_ctk_image(path, size)
+
     def setup_sidebar(self):
         self.sidebar = ctk.CTkFrame(self, width=200, corner_radius=0, fg_color=SIDEBAR_COLOR)
         self.sidebar.grid(row=0, column=0, sticky="nsew")
         self.sidebar.grid_rowconfigure(6, weight=1)
 
         # Logo
-        logo_path = os.path.join(os.path.dirname(__file__), "assets", "logo.png")
-        if os.path.exists(logo_path):
-            try:
-                pil_image = Image.open(logo_path)
-                self.logo_image = ctk.CTkImage(light_image=pil_image, dark_image=pil_image, size=(30, 30))
-                self.logo_label = ctk.CTkLabel(self.sidebar, text=" TurboClean", image=self.logo_image, compound="left", font=("Segoe UI", 20, "bold"), text_color=TEXT_COLOR)
-            except Exception as e:
-                print(f"Error loading logo: {e}")
-                self.logo_label = ctk.CTkLabel(self.sidebar, text="⚡ TurboClean", font=("Segoe UI", 20, "bold"), text_color=TEXT_COLOR)
+        logo_img = self.get_image("logo", (30, 30))
+        if logo_img:
+            self.logo_label = ctk.CTkLabel(self.sidebar, text=" TurboClean", image=logo_img, compound="left", font=("Segoe UI", 20, "bold"), text_color=TEXT_COLOR)
+            self.logo_image = logo_img
         else:
             self.logo_label = ctk.CTkLabel(self.sidebar, text="⚡ TurboClean", font=("Segoe UI", 20, "bold"), text_color=TEXT_COLOR)
             
@@ -68,23 +105,26 @@ class TurboCleanApp(ctk.CTk):
         # Navigation Buttons
         self.nav_buttons = {}
         buttons = [
-            ("Scan", "🔍", "scan"),
-            ("Clean", "✨", "clean"),
-            ("Boost", "⚡", "boost"),
-            ("Programs", "📦", "programs")
+            ("Scan", "scan_shield", "scan", "🔍"), # Updated icon_key and added fallback emoji
+            ("Clean", "clean_sparkle", "clean", "✨"),
+            ("Boost", "logo", "boost", "⚡"), 
+            ("Programs", "program_box", "programs", "📦") # Added fallback emoji
         ]
 
-        for i, (text, icon, name) in enumerate(buttons):
-            display_icon = icon
-            image = None
+        for i, (text, icon_key, name, fallback_emoji) in enumerate(buttons):
+            image = self.get_image(icon_key, (20, 20)) # Smaller size for sidebar icons
             
-            if icon == "⚡" and hasattr(self, 'logo_image'):
-                 display_icon = ""
-                 image = self.logo_image
+            # Use image if available, otherwise use emoji and set compound to "left"
+            if image:
+                button_text = f"  {text}"
+                compound_type = "left"
+            else:
+                button_text = f"  {fallback_emoji}  {text}"
+                compound_type = "left"
 
             btn = ctk.CTkButton(
                 self.sidebar, 
-                text=f"  {display_icon}  {text}", 
+                text=button_text,
                 anchor="w",
                 fg_color="transparent", 
                 text_color=TEXT_COLOR,
@@ -92,6 +132,7 @@ class TurboCleanApp(ctk.CTk):
                 font=("Segoe UI", 14),
                 height=40,
                 image=image,
+                compound=compound_type, 
                 command=lambda n=name: self.show_frame(n)
             )
             btn.grid(row=i+1, column=0, padx=10, pady=5, sticky="ew")
@@ -119,7 +160,7 @@ class TurboCleanApp(ctk.CTk):
             frame.grid_remove()
         
         # Show selected
-        self.frames[name].grid()
+        self.frames[name].grid(row=0, column=1, sticky="nsew", padx=20, pady=20)
         
         # Update sidebar button styles
         for btn_name, btn in self.nav_buttons.items():
@@ -143,7 +184,11 @@ class ScanFrame(ctk.CTkFrame):
         self.status_card = ctk.CTkFrame(self, fg_color=CARD_COLOR, corner_radius=10)
         self.status_card.pack(fill="x", pady=(0, 20), ipady=10)
         
-        self.status_icon = ctk.CTkLabel(self.status_card, text="🛡️", font=("Segoe UI", 30))
+        shield_img = self.master.get_image("scan_shield", (30, 30))
+        if shield_img:
+            self.status_icon = ctk.CTkLabel(self.status_card, text="", image=shield_img)
+        else:
+            self.status_icon = ctk.CTkLabel(self.status_card, text="🛡️", font=("Segoe UI", 30))
         self.status_icon.pack(side="left", padx=20)
         
         self.status_text_frame = ctk.CTkFrame(self.status_card, fg_color="transparent")
@@ -183,9 +228,17 @@ class ScanFrame(ctk.CTkFrame):
         
         ctk.CTkLabel(self.disk_frame, text="Disk Information", font=("Segoe UI", 14, "bold"), text_color=TEXT_COLOR).pack(anchor="w", pady=(0, 10))
         
+        self.selected_drives = [] # To store selected drive mountpoints
+        self.drive_checkboxes = [] # To hold checkbox variables and drive info
         self.load_disk_info()
 
     def load_disk_info(self):
+        # Clear previous entries
+        for widget in self.disk_frame.winfo_children():
+            if isinstance(widget, ctk.CTkFrame) and "drive_card" in widget.winfo_name(): # Only clear drive cards
+                widget.destroy()
+        self.drive_checkboxes = []
+
         try:
             partitions = psutil.disk_partitions()
             for p in partitions:
@@ -193,10 +246,20 @@ class ScanFrame(ctk.CTkFrame):
                     try:
                         usage = psutil.disk_usage(p.mountpoint)
                         
-                        card = ctk.CTkFrame(self.disk_frame, fg_color=CARD_COLOR, corner_radius=8)
+                        card = ctk.CTkFrame(self.disk_frame, fg_color=CARD_COLOR, corner_radius=8, name="drive_card")
                         card.pack(fill="x", pady=5)
                         
-                        icon = ctk.CTkLabel(card, text="💾", font=("Segoe UI", 20))
+                        # Checkbox for selection
+                        var = ctk.BooleanVar(value=True) # Default to selected
+                        cb = ctk.CTkCheckBox(card, text="", variable=var, width=24, checkbox_width=20, checkbox_height=20, border_color=BRAND_COLOR, fg_color=BRAND_COLOR)
+                        cb.pack(side="left", padx=(15, 5), pady=15)
+                        self.drive_checkboxes.append((var, p.mountpoint))
+                        
+                        disk_img = self.master.get_image("disk", (20, 20))
+                        if disk_img:
+                            icon = ctk.CTkLabel(card, text="", image=disk_img)
+                        else:
+                            icon = ctk.CTkLabel(card, text="💾", font=("Segoe UI", 20))
                         icon.pack(side="left", padx=15, pady=15)
                         
                         info = ctk.CTkFrame(card, fg_color="transparent")
